@@ -2,84 +2,50 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <title>WhatsApp Manual Sender</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WhatsApp Bulk Sender</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 1rem;
-      background: #f5f5f5;
-    }
-    h2 {
-      text-align: center;
-      color: #075e54;
-    }
+    body { font-family: Arial, sans-serif; padding: 1rem; background: #f0f0f0; }
+    h2 { text-align: center; color: #075e54; }
     .card {
-      background: white;
-      border-radius: 10px;
-      padding: 1rem;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-      margin-bottom: 1rem;
+      background: #fff; padding: 1rem; border-radius: 10px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin-bottom: 1rem;
     }
-    input[type="file"] {
-      width: 100%;
-      margin-bottom: 1rem;
+    input[type="file"] { width: 100%; margin-bottom: 10px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { padding: 8px; border: 1px solid #ccc; }
+    th { background: #075e54; color: white; }
+    textarea { width: 100%; resize: vertical; min-height: 40px; }
+    .btn {
+      background-color: #25D366; color: white; border: none;
+      padding: 10px; border-radius: 6px; cursor: pointer; width: 100%;
+      font-size: 16px; margin-top: 10px;
     }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 14px;
-    }
-    th, td {
-      padding: 8px;
-      border: 1px solid #ccc;
-    }
-    th {
-      background: #075e54;
-      color: white;
-    }
-    .status {
-      text-align: center;
-      font-weight: bold;
-    }
-    .sent {
-      color: green;
-    }
-    button {
-      width: 100%;
-      background-color: #25D366;
-      border: none;
-      color: white;
-      padding: 12px;
-      font-size: 16px;
-      border-radius: 8px;
-      cursor: pointer;
-      margin-top: 10px;
-    }
-    button:disabled {
-      background-color: #ccc;
-    }
+    .btn:disabled { background-color: #999; }
+    .sent { color: green; font-weight: bold; }
+    .pending { color: orange; }
+    .action-btn { font-size: 14px; padding: 6px 10px; margin: 2px; }
   </style>
 </head>
 <body>
 
-<h2>WhatsApp Bulk Sender</h2>
+<h2>📤 WhatsApp Manual Sender</h2>
 
 <div class="card">
   <input type="file" id="upload" accept=".xlsx,.xls" />
   <div id="fileInfo"></div>
-  <button onclick="clearData()">Re-upload File</button>
 </div>
 
 <div class="card" id="tableCard" style="display: none;">
   <table id="dataTable">
     <thead>
-      <tr><th>#</th><th>Mobile</th><th>Name</th><th>Message</th><th>Status</th></tr>
+      <tr><th>#</th><th>Mobile</th><th>Name</th><th>Message</th><th>Status</th><th>Action</th></tr>
     </thead>
     <tbody></tbody>
   </table>
-  <button id="sendBtn" onclick="sendMessages()">Send Messages</button>
+  <button class="btn" onclick="downloadPDF()">📥 Download Summary PDF</button>
 </div>
 
 <script>
@@ -93,16 +59,14 @@ document.getElementById('upload').addEventListener('change', function(e) {
   reader.onload = function(e) {
     const data = new Uint8Array(e.target.result);
     const workbook = XLSX.read(data, { type: 'array' });
-    const sheetName = workbook.SheetNames[0];
-    const rawSheet = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
+    const sheet = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "" });
 
-    if (!rawSheet.length) {
+    if (!sheet.length) {
       alert("No data found in file.");
       return;
     }
 
-    // Normalize keys
-    contactList = rawSheet.map(row => {
+    contactList = sheet.map(row => {
       const keys = Object.keys(row);
       const mobileKey = keys.find(k => /mobile|phone/i.test(k)) || "";
       const nameKey = keys.find(k => /name/i.test(k)) || "";
@@ -115,60 +79,73 @@ document.getElementById('upload').addEventListener('change', function(e) {
       };
     });
 
-    showTable(contactList);
+    showTable();
     document.getElementById('tableCard').style.display = 'block';
-    document.getElementById('fileInfo').innerText = `Loaded ${contactList.length} contacts from ${file.name}`;
+    document.getElementById('fileInfo').innerText = `Loaded ${contactList.length} contacts.`;
   };
   reader.readAsArrayBuffer(file);
 });
 
-function showTable(data) {
+function showTable() {
   const tbody = document.querySelector("#dataTable tbody");
   tbody.innerHTML = '';
-  data.forEach((row, i) => {
+  contactList.forEach((row, i) => {
     const tr = document.createElement("tr");
-    tr.id = `row-${i}`;
     tr.innerHTML = `
-      <td>${i+1}</td>
-      <td>${row.Mobile || ''}</td>
-      <td>${row.Name || ''}</td>
-      <td>${row.Message || ''}</td>
-      <td class="status" id="status-${i}">⏳</td>`;
+      <td>${i + 1}</td>
+      <td>${row.Mobile}</td>
+      <td>${row.Name}</td>
+      <td><textarea onchange="updateMessage(${i}, this.value)">${row.Message}</textarea></td>
+      <td id="status-${i}" class="${row.Sent ? 'sent' : 'pending'}">${row.Sent ? 'Sent ✅' : 'Pending ⏳'}</td>
+      <td><button class="action-btn" onclick="sendMessage(${i})">Send</button></td>`;
     tbody.appendChild(tr);
   });
 }
 
-function clearData() {
-  contactList = [];
-  document.querySelector("#dataTable tbody").innerHTML = '';
-  document.getElementById('upload').value = '';
-  document.getElementById('fileInfo').innerText = '';
-  document.getElementById('tableCard').style.display = 'none';
+function updateMessage(index, value) {
+  contactList[index].Message = value;
 }
 
-function sendMessages() {
-  if (!contactList.length) return alert("No data to send!");
+function sendMessage(index) {
+  const person = contactList[index];
+  const mobile = person.Mobile;
+  const msg = encodeURIComponent(person.Message || `Hi ${person.Name || ''}`);
+  if (!mobile) return alert("Mobile number missing.");
 
-  let delay = 0;
+  // Open WhatsApp
+  window.open(`https://wa.me/${mobile}?text=${msg}`, '_blank');
+
+  // Update status
+  person.Sent = true;
+  const status = document.getElementById(`status-${index}`);
+  status.innerText = 'Sent ✅';
+  status.classList.remove('pending');
+  status.classList.add('sent');
+}
+
+function downloadPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  doc.setFontSize(12);
+  doc.text("WhatsApp Sending Summary", 14, 14);
+
+  let y = 25;
+  doc.setFont("helvetica", "bold");
+  doc.text("No  Mobile           Name             Status", 14, y);
+  doc.setFont("helvetica", "normal");
 
   contactList.forEach((person, i) => {
-    const mobile = person.Mobile;
-    const msg = encodeURIComponent(person.Message || `Hi ${person.Name || ''}`);
-
-    if (mobile) {
-      setTimeout(() => {
-        window.open(`https://wa.me/${mobile}?text=${msg}`, '_blank');
-
-        // Mark as sent
-        person.Sent = true;
-        const statusCell = document.getElementById(`status-${i}`);
-        statusCell.innerText = '✅';
-        statusCell.classList.add('sent');
-      }, delay);
-
-      delay += 3000; // 3 seconds between each send
+    y += 8;
+    const status = person.Sent ? 'Sent' : 'Pending';
+    const line = `${i + 1}.  ${person.Mobile}    ${person.Name}    ${status}`;
+    doc.text(line, 14, y);
+    if (y > 270) {
+      doc.addPage();
+      y = 20;
     }
   });
+
+  doc.save('WhatsApp-Summary.pdf');
 }
 </script>
 
