@@ -1,37 +1,95 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>WhatsApp Manual Sender</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>WhatsApp Sender Tool</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; padding: 1rem; background: #f0f0f0; }
-    h2 { text-align: center; color: #075e54; }
+    body {
+      font-family: "Segoe UI", sans-serif;
+      margin: 0; padding: 1rem;
+      background: #f1f1f1;
+    }
+    h2, h3 {
+      color: #075e54;
+      text-align: center;
+    }
     .card {
-      background: #fff; padding: 1rem; border-radius: 10px;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin-bottom: 1rem;
+      background: white;
+      border-radius: 10px;
+      padding: 1rem;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      margin-bottom: 1.5rem;
     }
-    input[type="file"] { width: 100%; margin-bottom: 10px; }
-    table { width: 100%; border-collapse: collapse; font-size: 14px; }
-    th, td { padding: 8px; border: 1px solid #ccc; }
-    th { background: #075e54; color: white; }
-    textarea { width: 100%; resize: vertical; min-height: 40px; }
+    input[type="file"] {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      margin-bottom: 1rem;
+    }
+    table {
+      width: 100%;
+      font-size: 14px;
+      border-collapse: collapse;
+    }
+    th, td {
+      padding: 6px;
+      border: 1px solid #ddd;
+      text-align: left;
+    }
+    th {
+      background-color: #25D366;
+      color: white;
+    }
+    textarea {
+      width: 100%;
+      min-height: 40px;
+      resize: vertical;
+    }
     .btn {
-      background-color: #25D366; color: white; border: none;
-      padding: 10px; border-radius: 6px; cursor: pointer; width: 100%;
-      font-size: 16px; margin-top: 10px;
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      background: #25D366;
+      border: none;
+      border-radius: 6px;
+      color: white;
+      margin-top: 10px;
+      cursor: pointer;
     }
-    .btn:disabled { background-color: #999; }
-    .sent { color: green; font-weight: bold; }
+    .btn:disabled { background: gray; }
+    .status { font-weight: bold; text-align: center; }
+    .sent { color: green; }
     .pending { color: orange; }
-    .action-btn { font-size: 14px; padding: 6px 10px; margin: 2px; }
+    .help-btn {
+      background: #075e54;
+      padding: 10px;
+      color: white;
+      border-radius: 6px;
+      text-align: center;
+      margin-bottom: 10px;
+      cursor: pointer;
+    }
+    .infographic {
+      width: 100%;
+      border-radius: 10px;
+      margin: 10px 0;
+    }
+    .disclaimer {
+      font-size: 12px;
+      color: #555;
+      padding: 10px;
+      background: #fff7d5;
+      border: 1px solid #ffd369;
+      border-radius: 6px;
+    }
   </style>
 </head>
 <body>
 
-<h2>📤 WhatsApp Manual Sender</h2>
+<h2>📤 WhatsApp Message Sender</h2>
 
 <div class="card">
   <input type="file" id="upload" accept=".xlsx,.xls" />
@@ -41,11 +99,31 @@
 <div class="card" id="tableCard" style="display: none;">
   <table id="dataTable">
     <thead>
-      <tr><th>#</th><th>Mobile</th><th>Name</th><th>Message</th><th>Status</th><th>Action</th></tr>
+      <tr><th>#</th><th>Mobile</th><th>Name</th><th>Message</th><th>Status</th><th>Send</th></tr>
     </thead>
     <tbody></tbody>
   </table>
   <button class="btn" onclick="downloadPDF()">📥 Download Summary PDF</button>
+</div>
+
+<div class="card">
+  <div class="help-btn" onclick="toggleHelp()">❓ Help & How to Use</div>
+  <div id="helpSection" style="display:none">
+    <h3>How to Use</h3>
+    <ol>
+      <li>Prepare Excel file with columns: <strong>Mobile</strong>, <strong>Name</strong>, and <strong>Message</strong>.</li>
+      <li>Tap “Upload File” and select your Excel.</li>
+      <li>Review and edit messages.</li>
+      <li>Tap “Send” beside each contact to open WhatsApp.</li>
+      <li>Status will change to ✅ Sent.</li>
+      <li>Tap “Download Summary” to export PDF.</li>
+    </ol>
+    <img class="infographic" src="https://i.imgur.com/q7Gd3CH.png" alt="User Guide" />
+  </div>
+</div>
+
+<div class="card disclaimer">
+  <strong>Disclaimer:</strong> This tool uses your browser to open WhatsApp Web/App links. It does not store or send messages directly. We do not store or share any user data. Use responsibly. You are solely responsible for any messages sent using this tool. This tool is not affiliated with WhatsApp or Meta.
 </div>
 
 <script>
@@ -61,10 +139,7 @@ document.getElementById('upload').addEventListener('change', function(e) {
     const workbook = XLSX.read(data, { type: 'array' });
     const sheet = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "" });
 
-    if (!sheet.length) {
-      alert("No data found in file.");
-      return;
-    }
+    if (!sheet.length) return alert("No data found!");
 
     contactList = sheet.map(row => {
       const keys = Object.keys(row);
@@ -81,7 +156,7 @@ document.getElementById('upload').addEventListener('change', function(e) {
 
     showTable();
     document.getElementById('tableCard').style.display = 'block';
-    document.getElementById('fileInfo').innerText = `Loaded ${contactList.length} contacts.`;
+    document.getElementById('fileInfo').innerText = `✅ Loaded ${contactList.length} contacts`;
   };
   reader.readAsArrayBuffer(file);
 });
@@ -96,8 +171,8 @@ function showTable() {
       <td>${row.Mobile}</td>
       <td>${row.Name}</td>
       <td><textarea onchange="updateMessage(${i}, this.value)">${row.Message}</textarea></td>
-      <td id="status-${i}" class="${row.Sent ? 'sent' : 'pending'}">${row.Sent ? 'Sent ✅' : 'Pending ⏳'}</td>
-      <td><button class="action-btn" onclick="sendMessage(${i})">Send</button></td>`;
+      <td class="status ${row.Sent ? 'sent' : 'pending'}" id="status-${i}">${row.Sent ? 'Sent ✅' : 'Pending ⏳'}</td>
+      <td><button class="btn" style="padding:6px;font-size:12px;" onclick="sendMessage(${i})">Send</button></td>`;
     tbody.appendChild(tr);
   });
 }
@@ -111,11 +186,8 @@ function sendMessage(index) {
   const mobile = person.Mobile;
   const msg = encodeURIComponent(person.Message || `Hi ${person.Name || ''}`);
   if (!mobile) return alert("Mobile number missing.");
-
-  // Open WhatsApp
   window.open(`https://wa.me/${mobile}?text=${msg}`, '_blank');
 
-  // Update status
   person.Sent = true;
   const status = document.getElementById(`status-${index}`);
   status.innerText = 'Sent ✅';
@@ -127,17 +199,16 @@ function downloadPDF() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
   doc.setFontSize(12);
-  doc.text("WhatsApp Sending Summary", 14, 14);
+  doc.text("WhatsApp Message Summary", 14, 14);
 
   let y = 25;
   doc.setFont("helvetica", "bold");
-  doc.text("No  Mobile           Name             Status", 14, y);
+  doc.text("No   Mobile         Name           Status", 14, y);
   doc.setFont("helvetica", "normal");
 
-  contactList.forEach((person, i) => {
+  contactList.forEach((p, i) => {
     y += 8;
-    const status = person.Sent ? 'Sent' : 'Pending';
-    const line = `${i + 1}.  ${person.Mobile}    ${person.Name}    ${status}`;
+    const line = `${i + 1}. ${p.Mobile}   ${p.Name}   ${p.Sent ? 'Sent' : 'Pending'}`;
     doc.text(line, 14, y);
     if (y > 270) {
       doc.addPage();
@@ -146,6 +217,11 @@ function downloadPDF() {
   });
 
   doc.save('WhatsApp-Summary.pdf');
+}
+
+function toggleHelp() {
+  const help = document.getElementById('helpSection');
+  help.style.display = help.style.display === 'none' ? 'block' : 'none';
 }
 </script>
 
