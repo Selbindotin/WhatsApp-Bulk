@@ -39,6 +39,13 @@
       background: #075e54;
       color: white;
     }
+    .status {
+      text-align: center;
+      font-weight: bold;
+    }
+    .sent {
+      color: green;
+    }
     button {
       width: 100%;
       background-color: #25D366;
@@ -68,7 +75,7 @@
 <div class="card" id="tableCard" style="display: none;">
   <table id="dataTable">
     <thead>
-      <tr><th>#</th><th>Mobile</th><th>Name</th><th>Message</th></tr>
+      <tr><th>#</th><th>Mobile</th><th>Name</th><th>Message</th><th>Status</th></tr>
     </thead>
     <tbody></tbody>
   </table>
@@ -87,17 +94,30 @@ document.getElementById('upload').addEventListener('change', function(e) {
     const data = new Uint8Array(e.target.result);
     const workbook = XLSX.read(data, { type: 'array' });
     const sheetName = workbook.SheetNames[0];
-    const sheet = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+    const rawSheet = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
 
-    if (!sheet || !sheet.length) {
+    if (!rawSheet.length) {
       alert("No data found in file.");
       return;
     }
 
-    contactList = sheet;
+    // Normalize keys
+    contactList = rawSheet.map(row => {
+      const keys = Object.keys(row);
+      const mobileKey = keys.find(k => /mobile|phone/i.test(k)) || "";
+      const nameKey = keys.find(k => /name/i.test(k)) || "";
+      const msgKey = keys.find(k => /message|msg/i.test(k)) || "";
+      return {
+        Mobile: row[mobileKey]?.toString().trim(),
+        Name: row[nameKey]?.toString().trim(),
+        Message: row[msgKey]?.toString().trim(),
+        Sent: false
+      };
+    });
+
     showTable(contactList);
     document.getElementById('tableCard').style.display = 'block';
-    document.getElementById('fileInfo').innerText = `Loaded ${sheet.length} contacts from ${file.name}`;
+    document.getElementById('fileInfo').innerText = `Loaded ${contactList.length} contacts from ${file.name}`;
   };
   reader.readAsArrayBuffer(file);
 });
@@ -107,7 +127,13 @@ function showTable(data) {
   tbody.innerHTML = '';
   data.forEach((row, i) => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${i+1}</td><td>${row.Mobile || ''}</td><td>${row.Name || ''}</td><td>${row.Message || ''}</td>`;
+    tr.id = `row-${i}`;
+    tr.innerHTML = `
+      <td>${i+1}</td>
+      <td>${row.Mobile || ''}</td>
+      <td>${row.Name || ''}</td>
+      <td>${row.Message || ''}</td>
+      <td class="status" id="status-${i}">⏳</td>`;
     tbody.appendChild(tr);
   });
 }
@@ -124,14 +150,23 @@ function sendMessages() {
   if (!contactList.length) return alert("No data to send!");
 
   let delay = 0;
+
   contactList.forEach((person, i) => {
-    const mobile = person.Mobile?.toString().trim();
+    const mobile = person.Mobile;
     const msg = encodeURIComponent(person.Message || `Hi ${person.Name || ''}`);
+
     if (mobile) {
       setTimeout(() => {
         window.open(`https://wa.me/${mobile}?text=${msg}`, '_blank');
+
+        // Mark as sent
+        person.Sent = true;
+        const statusCell = document.getElementById(`status-${i}`);
+        statusCell.innerText = '✅';
+        statusCell.classList.add('sent');
       }, delay);
-      delay += 3000; // delay between each message
+
+      delay += 3000; // 3 seconds between each send
     }
   });
 }
